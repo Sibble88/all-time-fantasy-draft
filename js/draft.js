@@ -6,7 +6,9 @@ import { showReveal } from './reveal.js';
 export function showPassScreen() {
   const nextPlayer = gameState.draftOrder[gameState.currentPickIndex];
   const round = getCurrentRound();
-  document.getElementById('pass-round-info').textContent = `On the clock:`;
+  const pickInRound = (gameState.currentPickIndex % gameState.players.length) + 1;
+  const pickNum = `${round}.${String(pickInRound).padStart(2, '0')}`;
+  document.getElementById('pass-round-info').textContent = `Pick ${pickNum}`;
   document.getElementById('pass-name').textContent = nextPlayer;
   document.getElementById('pass-btn').textContent = `Start Round ${round}`;
   showScreen('pass');
@@ -22,7 +24,7 @@ export function showDraft() {
   const pickNum = String(pickInRound).padStart(2, '0');
   const poolLabel = gameState.pool === 'all' ? 'All NFL' : gameState.pool;
   const modeLabel = gameState.hardMode ? '  ·  HARD MODE' : '';
-  document.getElementById('turn-label').textContent = `🏈 ${currentPlayer}'s Pick`;
+  document.getElementById('turn-label').textContent = `${currentPlayer}'s Pick`;
   document.getElementById('round-label').textContent = `Pick ${round}.${pickNum}  ·  ${poolLabel}${modeLabel}`;
 
   renderRosterGrid(teamObj, null);
@@ -55,7 +57,7 @@ function renderRosterGrid(teamObj, selectedSlot) {
     const onclick = isFilled ? '' : `data-slot="${slot}"`;
     return `<div class="${cls}" ${onclick}>
       <div class="slot-label">${slot}</div>
-      <div class="slot-player">${pick ? esc(pick.name) + ' \'' + String(pick.year).slice(2) : 'Empty'}</div>
+      <div class="slot-player">${pick ? esc(pick.name) + ' \'' + String(pick.year).slice(2) : '—'}</div>
       ${pick ? `<div class="slot-pts">${pick.ppr_points} pts</div>` : ''}
     </div>`;
   }).join('');
