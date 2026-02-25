@@ -41,6 +41,14 @@ python3 serve.py
 
 Opens http://localhost:8000 in your browser.
 
+### 4. Stop the server
+
+Press `Ctrl+C` in the terminal, or kill the process on port 8000:
+
+```bash
+kill $(lsof -ti:8000)
+```
+
 ## Project Structure
 
 ```
