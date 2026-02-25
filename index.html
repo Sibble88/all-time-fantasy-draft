@@ -223,6 +223,28 @@
   /* Scrollable area */
   .scroll-area { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
+  /* Draft order list */
+  .draft-order-item {
+    display: flex; align-items: center; gap: 12px; padding: 14px;
+    background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius);
+    cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  .draft-order-item:active { cursor: grabbing; }
+  .draft-order-item.dragging { opacity: 0.5; }
+  .draft-order-item .order-num {
+    width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
+    background: var(--card-border); color: var(--text);
+  }
+  .draft-order-item .order-name { flex: 1; font-weight: 600; font-size: 1rem; }
+  .draft-order-item .order-handle { color: var(--text-dim); font-size: 1.2rem; cursor: grab; }
+  .draft-order-item .order-arrows { display: flex; flex-direction: column; gap: 2px; }
+  .draft-order-item .order-arrow {
+    background: none; border: none; color: var(--text-dim); font-size: 1rem;
+    cursor: pointer; padding: 2px 6px; line-height: 1;
+  }
+  .draft-order-item .order-arrow:hover { color: var(--primary); }
+
   @media (max-width: 360px) {
     .roster-grid { grid-template-columns: 1fr; }
     h1 { font-size: 1.5rem; }
@@ -291,6 +313,17 @@
     </label>
   </div>
 
+  <div class="toggle-row">
+    <div>
+      <span style="font-weight:600;">Custom Draft Order</span>
+      <div style="font-size:0.75rem; color:var(--text-dim);">Set your own pick order instead of random</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="custom-order-toggle">
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+
   <div style="background:var(--card); border:1px solid var(--card-border); border-radius:var(--radius); padding:14px; margin-top:8px; margin-bottom:16px; font-size:0.85rem; line-height:1.5;">
     <div style="font-weight:700; margin-bottom:6px; font-size:0.95rem;">How to Play</div>
     <ol style="padding-left:18px; color:var(--text-dim);">
@@ -313,6 +346,27 @@
   <button class="btn btn-accent" id="start-btn" onclick="startDraft()" disabled>
     Start Draft
   </button>
+</div>
+
+<!-- ==================== SCREEN 1B: DRAFT ORDER ==================== -->
+<div id="screen-draft-order" class="screen">
+  <div style="text-align:center; padding: 12px 0;">
+    <h1>Draft Order</h1>
+    <p class="subtitle" id="draft-order-subtitle">Set the pick order for Round 1</p>
+  </div>
+
+  <div style="display:flex; gap:8px; margin-bottom:16px;" id="draft-order-randomize-btn">
+    <button class="btn btn-outline" onclick="randomizeDraftOrder()" style="flex:1;">Randomize</button>
+  </div>
+
+  <div class="scroll-area">
+    <div id="draft-order-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+  </div>
+
+  <div class="mt-auto" style="padding-top:12px;">
+    <button class="btn btn-accent mb-12" onclick="confirmDraftOrder()">Start Draft</button>
+    <button class="btn btn-outline" onclick="showScreen('setup')">&#8592; Back</button>
+  </div>
 </div>
 
 <!-- ==================== SCREEN 2: DRAFT ==================== -->
@@ -378,9 +432,9 @@
 <div id="screen-pass" class="screen">
   <div class="pass-screen">
     <div class="pass-icon">📱</div>
-    <div class="pass-text">Pass the phone to</div>
+    <div id="pass-round-info" style="font-size:1.1rem; color:var(--text-dim);"></div>
     <div style="font-size:2rem; font-weight:800; color:var(--primary);" id="pass-name"></div>
-    <button class="btn btn-primary" onclick="showDraft()" style="max-width:280px;">I'm Ready</button>
+    <button class="btn btn-primary" onclick="showDraft()" style="max-width:280px;" id="pass-btn">Start Round 1</button>
   </div>
 </div>
 
@@ -498,6 +552,65 @@ function startDraft() {
   gameState.pool = document.getElementById('pool-select').value;
   gameState.flexEnabled = document.getElementById('flex-toggle').checked;
   gameState.hardMode = document.getElementById('hard-toggle').checked;
+  const customOrder = document.getElementById('custom-order-toggle').checked;
+
+  if (customOrder) {
+    // Custom: let them arrange the order
+    gameState.draftOrderList = [...gameState.players];
+    gameState.draftOrderRevealed = false;
+    document.getElementById('draft-order-randomize-btn').style.display = '';
+    renderDraftOrder();
+    showScreen('draft-order');
+  } else {
+    // Random: shuffle and show the result
+    gameState.draftOrderList = [...gameState.players];
+    for (let i = gameState.draftOrderList.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [gameState.draftOrderList[i], gameState.draftOrderList[j]] = [gameState.draftOrderList[j], gameState.draftOrderList[i]];
+    }
+    gameState.draftOrderRevealed = true;
+    document.getElementById('draft-order-randomize-btn').style.display = 'none';
+    renderDraftOrder();
+    showScreen('draft-order');
+  }
+}
+
+function renderDraftOrder() {
+  const list = document.getElementById('draft-order-list');
+  const revealed = gameState.draftOrderRevealed;
+  document.getElementById('draft-order-subtitle').textContent = revealed
+    ? 'Randomized draft order' : 'Set the pick order for Round 1';
+  list.innerHTML = gameState.draftOrderList.map((name, i) => `
+    <div class="draft-order-item" data-index="${i}">
+      <div class="order-num">${i + 1}</div>
+      <div class="order-name">${esc(name)}</div>
+      ${!revealed ? `<div class="order-arrows">
+        <button class="order-arrow" onclick="moveDraftOrder(${i}, -1)" ${i === 0 ? 'disabled style="opacity:0.2"' : ''}>&#9650;</button>
+        <button class="order-arrow" onclick="moveDraftOrder(${i}, 1)" ${i === gameState.draftOrderList.length - 1 ? 'disabled style="opacity:0.2"' : ''}>&#9660;</button>
+      </div>` : ''}
+    </div>
+  `).join('');
+}
+
+function moveDraftOrder(index, direction) {
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= gameState.draftOrderList.length) return;
+  const list = gameState.draftOrderList;
+  [list[index], list[newIndex]] = [list[newIndex], list[index]];
+  renderDraftOrder();
+}
+
+function randomizeDraftOrder() {
+  const list = gameState.draftOrderList;
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  renderDraftOrder();
+}
+
+function confirmDraftOrder() {
+  gameState.players = [...gameState.draftOrderList];
   gameState.draftOrder = buildSnakeOrder(gameState.players, getRosterSize());
   gameState.currentPickIndex = 0;
   gameState.takenCombos = [];
@@ -800,6 +913,8 @@ function confirmDraft() {
   const slot = gameState.selectedSlot;
   const round = getCurrentRound();
 
+  const pickInRound = (gameState.currentPickIndex % gameState.players.length) + 1;
+  rec.pickLabel = `${round}.${String(pickInRound).padStart(2, '0')}`;
   gameState.teams[currentPlayer][slot] = rec;
   gameState.takenCombos.push(`${rec.name}-${rec.year}`);
   gameState.takenPlayers.add(rec.name);
@@ -923,7 +1038,10 @@ function showReveal(drafter, slot, rec, round) {
 // ============================================================
 function showPassScreen() {
   const nextPlayer = gameState.draftOrder[gameState.currentPickIndex];
+  const round = getCurrentRound();
+  document.getElementById('pass-round-info').textContent = `On the clock:`;
   document.getElementById('pass-name').textContent = nextPlayer;
+  document.getElementById('pass-btn').textContent = `Start Round ${round}`;
   showScreen('pass');
 }
 
@@ -982,18 +1100,18 @@ function showRoundLeaderboard(round, isFinalRound) {
     const rank = i + 1;
     const rankClass = rank <= 3 ? ` rank-${rank}` : '';
     html += `<div class="lb-entry${rankClass}">
-      <div class="lb-header" onclick="this.nextElementSibling.classList.toggle('open')">
+      <div class="lb-header">
         <div class="lb-rank">${rank}</div>
         <div class="lb-name">${esc(s.name)}</div>
         <div class="lb-total">${s.total.toFixed(1)}</div>
       </div>
-      <div class="lb-detail">
+      <div class="lb-detail open">
         ${slots.map(sl => {
           const pk = s.teamObj[sl];
           if (pk) {
             return `<div class="lb-pick">
               <span class="pick-pos">${sl}</span>
-              <span class="pick-name">${esc(pk.name)} '${String(pk.year).slice(2)} (${pk.team})</span>
+              <span class="pick-name">${pk.pickLabel ? `<span style="color:var(--text-dim);font-size:0.7rem;margin-right:4px;">${pk.pickLabel}</span>` : ''}${esc(pk.name)} '${String(pk.year).slice(2)} (${pk.team})</span>
               <span class="pick-pts${pk.ppr_points === 0 ? ' zero' : ''}">${pk.ppr_points}</span>
             </div>`;
           } else {
@@ -1079,16 +1197,16 @@ function showFinalLeaderboard() {
       .map(([r, pts]) => `R${r}: ${pts.toFixed(1)}`)
       .join(' | ');
     return `<div class="lb-entry${rankClass}">
-      <div class="lb-header" onclick="this.nextElementSibling.classList.toggle('open')">
+      <div class="lb-header">
         <div class="lb-rank">${rank}</div>
         <div class="lb-name">${esc(s.name)}</div>
         <div class="lb-total">${s.total.toFixed(1)}</div>
       </div>
-      <div class="lb-detail">
+      <div class="lb-detail open">
         <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;">${roundLine}</div>
         ${s.picks.map(p => `<div class="lb-pick">
           <span class="pick-pos">${p.slot}</span>
-          <span class="pick-name">${p.pick ? esc(p.pick.name) + ' \'' + String(p.pick.year).slice(2) + ' (' + p.pick.team + ')' : '---'}</span>
+          <span class="pick-name">${p.pick ? (p.pick.pickLabel ? `<span style="color:var(--text-dim);font-size:0.7rem;margin-right:4px;">${p.pick.pickLabel}</span>` : '') + esc(p.pick.name) + ' \'' + String(p.pick.year).slice(2) + ' (' + p.pick.team + ')' : '---'}</span>
           <span class="pick-pts${p.pick && p.pick.ppr_points === 0 ? ' zero' : ''}">${p.pick ? p.pick.ppr_points : '---'}</span>
         </div>`).join('')}
       </div>
@@ -1129,6 +1247,7 @@ function resetGame() {
   document.getElementById('pool-select').value = 'all';
   document.getElementById('flex-toggle').checked = false;
   document.getElementById('hard-toggle').checked = false;
+  document.getElementById('custom-order-toggle').checked = false;
   showScreen('setup');
 }
 
