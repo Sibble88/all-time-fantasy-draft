@@ -63,17 +63,74 @@ export function renderDraftOrder() {
   const list = document.getElementById('draft-order-list');
   const revealed = gameState.draftOrderRevealed;
   document.getElementById('draft-order-subtitle').textContent = revealed
-    ? 'Randomized draft order' : 'Set the pick order for Round 1';
+    ? 'Randomized draft order' : 'Drag to set the pick order';
   list.innerHTML = gameState.draftOrderList.map((name, i) => `
-    <div class="draft-order-item" data-index="${i}">
+    <div class="draft-order-item" data-index="${i}" data-name="${esc(name)}">
       <div class="order-num">${i + 1}</div>
       <div class="order-name">${esc(name)}</div>
-      ${!revealed ? `<div class="order-arrows">
-        <button class="order-arrow" data-move="${i}" data-dir="-1" ${i === 0 ? 'disabled style="opacity:0.2"' : ''}>&#9650;</button>
-        <button class="order-arrow" data-move="${i}" data-dir="1" ${i === gameState.draftOrderList.length - 1 ? 'disabled style="opacity:0.2"' : ''}>&#9660;</button>
-      </div>` : ''}
+      ${!revealed ? `<div class="order-handle">&#8801;</div>` : ''}
     </div>
   `).join('');
+
+  if (!revealed) initDragAndDrop(list);
+}
+
+function initDragAndDrop(list) {
+  if (list._dragInit) return;
+  list._dragInit = true;
+
+  let dragging = null;
+
+  list.addEventListener('pointerdown', e => {
+    const item = e.target.closest('.draft-order-item');
+    if (!item) return;
+    dragging = item;
+    item.setPointerCapture(e.pointerId);
+    item.classList.add('dragging');
+  });
+
+  list.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    e.preventDefault();
+    const siblings = [...list.querySelectorAll('.draft-order-item:not(.dragging)')];
+    const after = getDragAfterElement(siblings, e.clientY);
+    if (after) {
+      list.insertBefore(dragging, after);
+    } else {
+      list.appendChild(dragging);
+    }
+  });
+
+  list.addEventListener('pointerup', () => {
+    if (!dragging) return;
+    dragging.classList.remove('dragging');
+    const items = [...list.querySelectorAll('.draft-order-item')];
+    gameState.draftOrderList = items.map(item => item.dataset.name);
+    items.forEach((item, i) => {
+      item.dataset.index = i;
+      item.querySelector('.order-num').textContent = i + 1;
+    });
+    dragging = null;
+  });
+
+  list.addEventListener('pointercancel', () => {
+    if (!dragging) return;
+    dragging.classList.remove('dragging');
+    dragging = null;
+    list._dragInit = false;
+    renderDraftOrder();
+  });
+}
+
+function getDragAfterElement(items, y) {
+  return items.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset, element: child };
+    }
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
 export function moveDraftOrder(index, direction) {
